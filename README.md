@@ -2,6 +2,8 @@
 
 Paste a unified diff (from Claude Code, Cursor, Aider, or `git diff`), get a structured review with scary-changes detection. Browser only.
 
+**Live demo:** https://0xelitesystem.github.io/agent-diff-reviewer/
+
 ## Use
 
 Open [`index.html`](./index.html). Paste a diff. Click Review.
@@ -33,7 +35,7 @@ You get:
 
 After an agent finishes a task, the diff is the ground truth. The summary the agent writes is always more flattering than the diff. Reviewers who only read the summary merge things they didn't intend to.
 
-This tool surfaces specific patterns worth scrutinizing — not as a replacement for reading the diff, but to focus attention.
+This tool surfaces specific patterns worth scrutinizing, not as a replacement for reading the diff, but to focus attention.
 
 ## What it doesn't do
 
