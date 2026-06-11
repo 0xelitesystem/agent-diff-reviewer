@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agent Diff Reviewer</title>
+<style>
+:root {
+  --bg: #0c1410;
+  --panel: #121d18;
+  --panel-2: #0a1410;
+  --ink: #c8e0c8;
+  --ink-soft: #88a888;
+  --rule: #2a4030;
+  --green: #66d080;
+  --green-deep: #88e0a0;
+  --green-dim: #4a8060;
+  --add-bg: rgba(102, 208, 128, 0.12);
+  --add-text: #a8e8b8;
+  --del-bg: rgba(220, 130, 100, 0.12);
+  --del-text: #e8a890;
+  --hunk-bg: rgba(120, 160, 220, 0.08);
+  --hunk-text: #88a8c8;
+  --warn: #d8a050;
+  --err: #e08070;
+  --code-bg: #060c08;
+}
+[data-theme="light"] {
+  --bg: #f4f7f2;
+  --panel: #ffffff;
+  --panel-2: #ebefe8;
+  --ink: #1a2a18;
+  --ink-soft: #5a6a58;
+  --rule: #c8d4c4;
+  --green: #2a6e3a;
+  --green-deep: #1a4e2a;
+  --green-dim: #5a8a68;
+  --add-bg: #e0f4e0;
+  --add-text: #1a4e2a;
+  --del-bg: #f8e0d8;
+  --del-text: #6e2a1a;
+  --hunk-bg: #e8eef8;
+  --hunk-text: #2a4868;
+  --warn: #8a5800;
+  --err: #8b2a1a;
+  --code-bg: #f0f4ec;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  background: var(--bg);
+  color: var(--ink);
+  min-height: 100vh;
+  padding: 1.5rem 1rem;
+  line-height: 1.5;
+}
+.wrap { max-width: 1300px; margin: 0 auto; }
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  border-bottom: 1px solid var(--green);
+  padding-bottom: 0.85rem;
+  margin-bottom: 1.5rem;
+}
+h1 {
+  font-size: 1.3rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--green);
+}
+.subtitle {
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  margin-top: 0.2rem;
+}
+.subtitle::before {
+  content: "// ";
+  color: var(--green-dim);
+}
+.theme-btn {
+  background: transparent;
+  border: 1px solid var(--rule);
+  color: var(--ink-soft);
+  padding: 0.4rem 0.85rem;
+  font-size: 0.75rem;
+  font-family: inherit;
+  cursor: pointer;
+  border-radius: 2px;
+}
+.theme-btn:hover { border-color: var(--green); color: var(--green); }
+.lede {
+  font-family: ui-sans-serif, sans-serif;
+  font-size: 0.92rem;
+  margin-bottom: 1.5rem;
+  max-width: 70ch;
+}
+.input-section {
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+  border-radius: 3px;
+}
+.input-section h2 {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--green);
+  margin-bottom: 0.85rem;
+  font-family: ui-sans-serif, sans-serif;
+}
+textarea {
+  width: 100%;
+  background: var(--code-bg);
+  border: 1px solid var(--rule);
+  color: var(--ink);
+  padding: 0.85rem;
+  font-family: inherit;
+  font-size: 0.82rem;
+  line-height: 1.55;
+  resize: vertical;
+  min-height: 200px;
+  border-radius: 2px;
+}
+textarea:focus { outline: 2px solid var(--green); outline-offset: 1px; }
+.btn-row {
+  display: flex;
+  gap: 0.65rem;
+  margin-top: 0.85rem;
+  flex-wrap: wrap;
+}
+button {
+  font-family: inherit;
+  font-size: 0.78rem;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--rule);
+  background: var(--panel);
+  color: var(--ink);
+  cursor: pointer;
+  border-radius: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+button.primary {
+  background: var(--green);
+  border-color: var(--green);
+  color: var(--bg);
+  font-weight: 700;
+}
+[data-theme="dark"] button.primary {
+  color: var(--bg) !important;
+}
+button.primary:hover { background: var(--green-deep); }
+button:hover { border-color: var(--green); }
+.results { display: none; }
+.results.show { display: block; }
+.section {
+  background: var(--panel);
+  border: 1px solid var(--rule);
+  padding: 1.25rem;
+  margin-bottom: 1.25rem;
+  border-radius: 3px;
+}
+.section h2 {
+  font-family: ui-sans-serif, sans-serif;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--green);
+  margin-bottom: 0.85rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--rule);
+}
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.85rem;
+}
+.summary-cell {
+  background: var(--panel-2);
+  padding: 0.85rem;
+  border-radius: 2px;
+  border-left: 3px solid var(--green);
+}
+.summary-num {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--green-deep);
+  display: block;
+  font-family: inherit;
+}
+.summary-label {
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 0.25rem;
+  font-family: ui-sans-serif, sans-serif;
+}
+.summary-cell.added { border-left-color: var(--green); }
+.summary-cell.added .summary-num { color: var(--green-deep); }
+.summary-cell.removed { border-left-color: var(--err); }
+.summary-cell.removed .summary-num { color: var(--err); }
+.summary-cell.warn { border-left-color: var(--warn); }
+.summary-cell.warn .summary-num { color: var(--warn); }
+
+.flag-list { list-style: none; padding: 0; }
+.flag-list li {
+  padding: 0.65rem 0.85rem;
+  margin-bottom: 0.4rem;
+  background: var(--panel-2);
+  border-radius: 2px;
+  font-size: 0.85rem;
+  display: flex;
+  gap: 0.65rem;
+  align-items: flex-start;
+  font-family: ui-sans-serif, sans-serif;
+  border-left: 3px solid var(--rule);
+}
+.flag-list li.high { border-left-color: var(--err); }
+.flag-list li.med { border-left-color: var(--warn); }
+.flag-list li.info { border-left-color: var(--green); }
+.flag-tag {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.15rem 0.45rem;
+  border-radius: 2px;
+  flex-shrink: 0;
+  font-family: inherit;
+}
+.flag-list li.high .flag-tag { background: var(--err); color: var(--bg); }
+.flag-list li.med .flag-tag { background: var(--warn); color: var(--bg); }
+.flag-list li.info .flag-tag { background: var(--green); color: var(--bg); }
+[data-theme="dark"] .flag-list li.high .flag-tag,
+[data-theme="dark"] .flag-list li.med .flag-tag,
+[data-theme="dark"] .flag-list li.info .flag-tag { color: var(--bg) !important; }
+.flag-content { flex: 1; }
+.flag-loc {
+  font-family: ui-monospace, monospace;
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+  margin-top: 0.2rem;
+}
+
+.file-block {
+  background: var(--panel-2);
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  margin-bottom: 0.85rem;
+  overflow: hidden;
+}
+.file-head {
+  background: var(--code-bg);
+  padding: 0.55rem 0.85rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--rule);
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.file-name {
+  font-weight: 700;
+  color: var(--green);
+  font-size: 0.85rem;
+  word-break: break-all;
+}
+.file-stats {
+  display: flex;
+  gap: 0.85rem;
+  font-size: 0.78rem;
+  font-family: inherit;
+}
+.file-stats .add { color: var(--green-deep); }
+.file-stats .del { color: var(--err); }
+.diff-content {
+  padding: 0;
+  font-family: ui-monospace, monospace;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  overflow-x: auto;
+  max-height: 400px;
+  overflow-y: auto;
+}
+.diff-line {
+  display: flex;
+  white-space: pre;
+  padding: 0 0.85rem;
+}
+.diff-line.add { background: var(--add-bg); color: var(--add-text); }
+.diff-line.del { background: var(--del-bg); color: var(--del-text); }
+.diff-line.hunk { background: var(--hunk-bg); color: var(--hunk-text); padding: 0.25rem 0.85rem; }
+.diff-line.context { color: var(--ink); }
+.diff-line.empty { padding: 0.4rem 0.85rem; color: var(--ink-soft); font-style: italic; }
+.diff-marker { width: 1.5rem; flex-shrink: 0; }
+
+.error-msg {
+  background: var(--code-bg);
+  border-left: 3px solid var(--err);
+  padding: 0.85rem 1rem;
+  border-radius: 2px;
+  font-size: 0.85rem;
+  color: var(--err);
+  margin-top: 0.85rem;
+  font-family: ui-sans-serif, sans-serif;
+}
+footer {
+  margin-top: 2.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--rule);
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+}
+footer a { color: var(--green); text-decoration: none; }
+footer a:hover { text-decoration: underline; }
+@media (max-width: 700px) {
+  body { padding: 1rem 0.5rem; }
+  h1 { font-size: 1.1rem; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div>
+    <h1>Agent Diff Reviewer</h1>
+    <div class="subtitle">paste a unified diff, surface the scary parts</div>
+  </div>
+  <button class="theme-btn" id="theme-toggle" type="button">Light</button>
+</header>
+
+<p class="lede">Paste a unified diff (e.g. <code>git diff</code> output) from a Claude Code, Cursor, Aider, or any other agent run. The tool parses hunks, summarizes changes per file, surfaces patterns worth reviewing carefully (deleted security checks, new dependencies, possible secret leaks, large unexplained deletions), and renders a syntax-aware view. Browser only.</p>
+
+<div class="input-section">
+  <h2>Paste diff</h2>
+  <textarea id="diff-input" placeholder="diff --git a/src/auth.ts b/src/auth.ts
+index abc..def 100644
+--- a/src/auth.ts
++++ b/src/auth.ts
+@@ -10,7 +10,7 @@ export function validate(token) {
+   const decoded = jwt.decode(token);
+-  if (!decoded || !decoded.userId) return null;
++  if (!decoded) return null;
+   return decoded;
+ }" spellcheck="false"></textarea>
+  <div class="btn-row">
+    <button class="primary" id="review-btn" type="button">Review</button>
+    <button id="sample-btn" type="button">Sample</button>
+    <button id="clear-btn" type="button">Clear</button>
+  </div>
+  <div id="error-box"></div>
+</div>
+
+<div class="results" id="results">
+  <div class="section">
+    <h2>Summary</h2>
+    <div class="summary-grid" id="summary"></div>
+  </div>
+
+  <div class="section" id="flags-section">
+    <h2>Flags</h2>
+    <ul class="flag-list" id="flags"></ul>
+  </div>
+
+  <div class="section">
+    <h2>Files</h2>
+    <div id="files"></div>
+  </div>
+</div>
+
+<footer>
+  <div>Agent Diff Reviewer. MIT licensed. <a href="https://github.com/0xelitesystem/agent-diff-reviewer" target="_blank" rel="noopener">View source</a>.</div>
+  <div>Browser-based. Diffs stay on your device.</div>
+</footer>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const themeBtn = $("theme-toggle");
+function setTheme(t) {
+  document.documentElement.setAttribute("data-theme", t);
+  themeBtn.textContent = t === "dark" ? "Light" : "Dark";
+}
+themeBtn.addEventListener("click", () => {
+  const cur = document.documentElement.getAttribute("data-theme") || "dark";
+  setTheme(cur === "dark" ? "light" : "dark");
+});
+
+function escapeHtml(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function parseDiff(text) {
+  const files = [];
+  const lines = text.split("\n");
+  let current = null;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.startsWith("diff --git ")) {
+      if (current) files.push(current);
+      const m = line.match(/diff --git a\/(.+?) b\/(.+?)$/);
+      const path = m ? m[2] : line.slice(11);
+      current = { path, oldPath: m ? m[1] : path, hunks: [], adds: 0, dels: 0, mode: "modify" };
+    } else if (line.startsWith("--- /dev/null")) {
+      if (current) current.mode = "add";
+    } else if (line.startsWith("+++ /dev/null")) {
+      if (current) current.mode = "delete";
+    } else if (line.startsWith("rename from")) {
+      if (current) current.mode = "rename";
+    } else if (line.startsWith("@@")) {
+      if (current) {
+        const h = { header: line, lines: [] };
+        current.hunks.push(h);
+        i++;
+        while (i < lines.length) {
+          const hl = lines[i];
+          if (hl.startsWith("diff --git") || hl.startsWith("@@")) {
+            i--;
+            break;
+          }
+          h.lines.push(hl);
+          if (hl.startsWith("+") && !hl.startsWith("+++")) current.adds++;
+          if (hl.startsWith("-") && !hl.startsWith("---")) current.dels++;
+          i++;
+        }
+      }
+    }
+  }
+  if (current) files.push(current);
+  return files;
+}
+
+const SECRET_PATTERNS = [
+  { name: "AWS access key", re: /\bAKIA[0-9A-Z]{16}\b/ },
+  { name: "AWS secret key", re: /\b[A-Za-z0-9/+=]{40}\b/, requireKeyword: /aws|secret|token/i },
+  { name: "GitHub token", re: /\bghp_[A-Za-z0-9]{36}\b|\bgithub_pat_[A-Za-z0-9_]{82}\b/ },
+  { name: "Anthropic API key", re: /\bsk-ant-[A-Za-z0-9_-]{20,}/ },
+  { name: "OpenAI API key", re: /\bsk-[A-Za-z0-9]{40,}/ },
+  { name: "Stripe key", re: /\bsk_live_[A-Za-z0-9]{24,}/ },
+  { name: "Slack token", re: /\bxox[abpr]-[A-Za-z0-9-]{10,}/ },
+  { name: "Private key block", re: /-----BEGIN (RSA |OPENSSH |EC |DSA |PGP )?PRIVATE KEY-----/ },
+  { name: "Generic secret in literal", re: /(password|secret|api[_-]?key|access[_-]?token)\s*[:=]\s*["'][^"'\s]{8,}["']/i },
+];
+
+const SECURITY_PATHS = /\.env(\.|$)|secrets?\/|credentials\/|auth\/|\/security\//i;
+const DEPS_FILES = /\b(package\.json|package-lock\.json|yarn\.lock|pnpm-lock\.yaml|requirements\.txt|pyproject\.toml|poetry\.lock|Cargo\.toml|Cargo\.lock|go\.mod|go\.sum|Gemfile|Gemfile\.lock|composer\.json)$/;
+
+function reviewFiles(files) {
+  const flags = [];
+  let totalAdds = 0, totalDels = 0;
+
+  for (const f of files) {
+    totalAdds += f.adds;
+    totalDels += f.dels;
+
+    if (f.mode === "delete") {
+      if (SECURITY_PATHS.test(f.oldPath)) {
+        flags.push({ level: "high", msg: `Security-relevant file deleted: ${f.oldPath}`, loc: f.oldPath });
+      } else if (f.oldPath.includes("test") || f.oldPath.includes("spec")) {
+        flags.push({ level: "med", msg: `Test file deleted: ${f.oldPath}. Verify the behavior is now tested elsewhere.`, loc: f.oldPath });
+      } else {
+        flags.push({ level: "info", msg: `File deleted: ${f.oldPath}`, loc: f.oldPath });
+      }
+    }
+
+    if (f.mode === "modify" && SECURITY_PATHS.test(f.path)) {
+      flags.push({ level: "high", msg: `Modified security-relevant file: ${f.path}. Read the diff carefully.`, loc: f.path });
+    }
+
+    if (DEPS_FILES.test(f.path)) {
+      flags.push({ level: "med", msg: `Dependency manifest changed: ${f.path}. Confirm new dependencies are intentional.`, loc: f.path });
+    }
+
+    // Find added lines
+    let lineNo = 0;
+    for (const hunk of f.hunks) {
+      const hm = hunk.header.match(/\+(\d+)/);
+      if (hm) lineNo = parseInt(hm[1]) - 1;
+      for (const l of hunk.lines) {
+        if (l.startsWith("@@")) continue;
+        if (l.startsWith("+")) {
+          lineNo++;
+          const content = l.slice(1);
+          // Check for secrets
+          for (const pat of SECRET_PATTERNS) {
+            if (pat.re.test(content)) {
+              if (pat.requireKeyword && !pat.requireKeyword.test(content)) continue;
+              flags.push({
+                level: "high",
+                msg: `Possible ${pat.name} in added line. Verify it's not a real secret.`,
+                loc: `${f.path}:${lineNo}`
+              });
+            }
+          }
+          // Long lines flag
+          if (content.length > 200) {
+            flags.push({
+              level: "info",
+              msg: `Very long line added (${content.length} chars). Could be data, generated code, or minified content.`,
+              loc: `${f.path}:${lineNo}`
+            });
+            break;
+          }
+        } else if (l.startsWith("-")) {
+          // counted at deletion site
+        } else {
+          lineNo++;
+        }
+      }
+    }
+
+    // Large deletion flag
+    if (f.dels > 50 && f.adds < f.dels / 4) {
+      flags.push({
+        level: "med",
+        msg: `Large deletion in ${f.path}: -${f.dels} lines vs +${f.adds} added. Confirm intentional.`,
+        loc: f.path
+      });
+    }
+  }
+
+  return { flags, totalAdds, totalDels };
+}
+
+function renderFiles(files) {
+  const container = $("files");
+  container.innerHTML = "";
+  for (const f of files) {
+    const block = document.createElement("div");
+    block.className = "file-block";
+    const headHTML = `
+      <div class="file-head">
+        <div class="file-name">${escapeHtml(f.path)} <span style="color: var(--ink-soft); font-size: 0.72rem;">[${f.mode}]</span></div>
+        <div class="file-stats">
+          <span class="add">+${f.adds}</span>
+          <span class="del">-${f.dels}</span>
+        </div>
+      </div>
+    `;
+    let bodyHTML = '<div class="diff-content">';
+    if (f.hunks.length === 0) {
+      bodyHTML += '<div class="diff-line empty">(binary or empty diff)</div>';
+    } else {
+      for (const h of f.hunks) {
+        bodyHTML += `<div class="diff-line hunk"><span class="diff-marker"></span>${escapeHtml(h.header)}</div>`;
+        for (const l of h.lines) {
+          if (l.startsWith("@@")) continue;
+          let cls = "context";
+          let marker = " ";
+          let content = l;
+          if (l.startsWith("+") && !l.startsWith("+++")) {
+            cls = "add"; marker = "+"; content = l.slice(1);
+          } else if (l.startsWith("-") && !l.startsWith("---")) {
+            cls = "del"; marker = "-"; content = l.slice(1);
+          } else if (l.startsWith(" ")) {
+            content = l.slice(1);
+          }
+          bodyHTML += `<div class="diff-line ${cls}"><span class="diff-marker">${marker}</span>${escapeHtml(content)}</div>`;
+        }
+      }
+    }
+    bodyHTML += "</div>";
+    block.innerHTML = headHTML + bodyHTML;
+    container.appendChild(block);
+  }
+}
+
+function review() {
+  $("error-box").innerHTML = "";
+  const text = $("diff-input").value.trim();
+  if (!text) {
+    $("error-box").innerHTML = `<div class="error-msg">Paste a unified diff to review.</div>`;
+    $("results").classList.remove("show");
+    return;
+  }
+
+  const files = parseDiff(text);
+  if (files.length === 0) {
+    $("error-box").innerHTML = `<div class="error-msg">No diff blocks found. Expected unified diff format starting with <code>diff --git</code>.</div>`;
+    $("results").classList.remove("show");
+    return;
+  }
+
+  const { flags, totalAdds, totalDels } = reviewFiles(files);
+
+  // Summary
+  const high = flags.filter(f => f.level === "high").length;
+  const med = flags.filter(f => f.level === "med").length;
+  $("summary").innerHTML = `
+    <div class="summary-cell"><span class="summary-num">${files.length}</span><div class="summary-label">files changed</div></div>
+    <div class="summary-cell added"><span class="summary-num">+${totalAdds}</span><div class="summary-label">lines added</div></div>
+    <div class="summary-cell removed"><span class="summary-num">-${totalDels}</span><div class="summary-label">lines removed</div></div>
+    <div class="summary-cell ${high > 0 ? "warn" : ""}"><span class="summary-num">${high}</span><div class="summary-label">high-severity flags</div></div>
+    <div class="summary-cell ${med > 0 ? "warn" : ""}"><span class="summary-num">${med}</span><div class="summary-label">medium flags</div></div>
+  `;
+
+  // Flags
+  const flagsEl = $("flags");
+  flagsEl.innerHTML = "";
+  if (flags.length === 0) {
+    flagsEl.innerHTML = `<li class="info"><span class="flag-tag">info</span><div class="flag-content">No automated flags. Still: read every line of the diff.</div></li>`;
+  } else {
+    const sorted = [...flags].sort((a, b) => {
+      const order = { high: 0, med: 1, info: 2 };
+      return order[a.level] - order[b.level];
+    });
+    flagsEl.innerHTML = sorted.map(f => `
+      <li class="${f.level}">
+        <span class="flag-tag">${f.level}</span>
+        <div class="flag-content">
+          <div>${escapeHtml(f.msg)}</div>
+          <div class="flag-loc">${escapeHtml(f.loc)}</div>
+        </div>
+      </li>
+    `).join("");
+  }
+
+  renderFiles(files);
+  $("results").classList.add("show");
+}
+
+$("review-btn").addEventListener("click", review);
+
+$("clear-btn").addEventListener("click", () => {
+  $("diff-input").value = "";
+  $("results").classList.remove("show");
+  $("error-box").innerHTML = "";
+});
+
+$("sample-btn").addEventListener("click", () => {
+  $("diff-input").value = `diff --git a/src/auth.ts b/src/auth.ts
+index 1234567..89abcde 100644
+--- a/src/auth.ts
++++ b/src/auth.ts
+@@ -10,7 +10,7 @@ export function validateToken(token: string) {
+   const decoded = jwt.decode(token);
+-  if (!decoded || !decoded.userId || decoded.exp < Date.now()/1000) return null;
++  if (!decoded) return null;
+   return decoded;
+ }
+diff --git a/src/utils/db.ts b/src/utils/db.ts
+index abc..def 100644
+--- a/src/utils/db.ts
++++ b/src/utils/db.ts
+@@ -1,3 +1,5 @@
+ import { Pool } from 'pg';
++import _ from 'lodash';
++const API_KEY = "sk-ant-fake1234567890abcdef1234567890abcdef";
+ export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+diff --git a/tests/auth.test.ts b/tests/auth.test.ts
+deleted file mode 100644
+index 999..000
+--- a/tests/auth.test.ts
++++ /dev/null
+@@ -1,15 +0,0 @@
+-test('validateToken rejects expired tokens', () => {
+-  const expired = jwt.sign({...}, secret, { expiresIn: '-1h' });
+-  expect(validateToken(expired)).toBeNull();
+-});
+diff --git a/package.json b/package.json
+index 111..222 100644
+--- a/package.json
++++ b/package.json
+@@ -10,6 +10,7 @@
+   "dependencies": {
+     "express": "^4.18.0",
++    "lodash": "^4.17.21",
+     "pg": "^8.11.0"
+   }
+ }`;
+});
+
+setTheme("dark");
+</script>
+</body>
+</html>
