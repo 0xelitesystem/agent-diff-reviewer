@@ -72,6 +72,10 @@ Don't add: API integrations, telemetry, npm dependencies. Single file.
 
 No build. Single HTML file.
 
+## More
+
+Part of a catalog of single-file browser tools and plain-language references, all MIT licensed and dependency-free: [0xelitesystem.github.io](https://0xelitesystem.github.io/). Built by [elitesystem.ai](https://elitesystem.ai).
+
 ## License
 
 MIT.
